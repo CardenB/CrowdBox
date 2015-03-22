@@ -1,12 +1,14 @@
 import json
 from flask import Flask, request, redirect, g, render_template
-import requests
 import base64
 import urllib
 import os
 
-# Authentication Steps, paramaters, and responses are defined at https://developer.spotify.com/web-api/authorization-guide/
-# Visit this url to see all the steps, parameters, and expected response. 
+'''
+Authentication Steps, paramaters, and responses are defined at
+    https://developer.spotify.com/web-api/authorization-guide/
+Visit this url to see all the steps, parameters, and expected response. 
+'''
 
 
 app = Flask(__name__)
@@ -24,11 +26,13 @@ SPOTIFY_API_URL = "{}/{}".format(SPOTIFY_API_BASE_URL, API_VERSION)
 
 
 # Server-side Parameters
-# CLIENT_SIDE_URL = "http://127.0.0.1"
 CLIENT_SIDE_URL = "http://localhost"
 PORT = 8080
 REDIRECT_URI = "{}:{}/callback/".format(CLIENT_SIDE_URL, PORT)
-SCOPE = "playlist-read-private playlist-modify-public playlist-modify-private"
+SCOPE = ("playlist-read-private"
+         "playlist-modify-public"
+         "playlist-modify-private"
+        )
 STATE = ""
 SHOW_DIALOG_bool = True
 SHOW_DIALOG_str = str(SHOW_DIALOG_bool).lower()
@@ -62,7 +66,9 @@ def callback():
     }
     base64encoded = base64.b64encode("{}:{}".format(CLIENT_ID, CLIENT_SECRET))
     headers = {"Authorization": "Basic {}".format(base64encoded)}
-    post_request = requests.post(SPOTIFY_TOKEN_URL, data=code_payload, headers=headers)
+    post_request = requests.post(SPOTIFY_TOKEN_URL,
+                                 data=code_payload,
+                                 headers=headers)
 
     # Auth Step 5: Tokens are Returned to Application
     response_data = json.loads(post_request.text)
