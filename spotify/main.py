@@ -14,6 +14,7 @@ Visit this url to see all the steps, parameters, and expected response.
 '''
 
 app = Flask(__name__)
+app.secret_key = os.environ['FLASK_SECRET_KEY']
 
 #  Client Keys
 CLIENT_ID = os.environ['CLIENT_ID']
@@ -38,6 +39,7 @@ SCOPE = ("playlist-read-private "
 STATE = ""
 SHOW_DIALOG_bool = True
 SHOW_DIALOG_str = str(SHOW_DIALOG_bool).lower()
+CACHE_PATH = "cache.data"
 
 spotifyOAuth = spotipy.oauth2.SpotifyOAuth(
         client_id=CLIENT_ID,
@@ -45,7 +47,7 @@ spotifyOAuth = spotipy.oauth2.SpotifyOAuth(
         redirect_uri=REDIRECT_URI,
         state=STATE,
         scope=SCOPE,
-        cache_path=None
+        cache_path=CACHE_PATH
         )
 
 @app.route("/")
@@ -56,25 +58,23 @@ def index():
 
 @app.route("/callback/")
 def callback():
+    def load_token_json(token_json):
+        access_token = token_json["access_token"]
+        refresh_token = token_json["refresh_token"]
+        token_type = token_json["token_type"]
+        expires_in = token_json["expires_in"]
+        return access_token, refresh_token, \
+               token_type, expires_in
     # Auth Step 4: Requests refresh and access tokens
     auth_token = request.args['code']
-    code_payload = {
-        "grant_type": "authorization_code",
-        "code": str(auth_token),
-        "redirect_uri": REDIRECT_URI
-    }
-    base64encoded = base64.b64encode("{}:{}".format(CLIENT_ID, CLIENT_SECRET))
-    headers = {"Authorization": "Basic {}".format(base64encoded)}
-    post_request = requests.post(SPOTIFY_TOKEN_URL,
-                                 data=code_payload,
-                                 headers=headers)
-
-    # Auth Step 5: Tokens are Returned to Application
-    response_data = json.loads(post_request.text)
-    access_token = response_data["access_token"]
-    refresh_token = response_data["refresh_token"]
-    token_type = response_data["token_type"]
-    expires_in = response_data["expires_in"]
+    token_json = spotifyOAuth.get_cached_token()
+    if token_json is None:
+        token_json = spotifyOAuth.get_access_token(str(auth_token))
+        print "Reauthenticating Token"
+    else:
+        print "Retrieving Cached Token"
+    access_token, refresh_token, token_type, expires_in = \
+            load_token_json(token_json)
 
     # Auth Step 6: Use the access token to access Spotify API
     authorization_header = {"Authorization":"Bearer {}".format(access_token)}
