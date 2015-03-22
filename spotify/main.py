@@ -1,5 +1,5 @@
 import json
-from flask import Flask, request, redirect, g, render_template
+from flask import Flask, request, redirect, g, render_template, session
 import requests
 import spotipy
 from spotipy import oauth2
@@ -39,7 +39,7 @@ SCOPE = ("playlist-read-private "
 STATE = ""
 SHOW_DIALOG_bool = True
 SHOW_DIALOG_str = str(SHOW_DIALOG_bool).lower()
-CACHE_PATH = "cache.data"
+CACHE_PATH = None
 
 spotifyOAuth = spotipy.oauth2.SpotifyOAuth(
         client_id=CLIENT_ID,
@@ -49,6 +49,18 @@ spotifyOAuth = spotipy.oauth2.SpotifyOAuth(
         scope=SCOPE,
         cache_path=CACHE_PATH
         )
+
+def retrieveTokensFromSession():
+    return session["token_info"]["access_token"],\
+            session["token_info"]["refresh_token"],\
+            session["token_info"]["token_type"],\
+            session["token_info"]["expires_in"]
+
+def get_cached_token():
+    if "token_info" in session:
+        return session["token_info"]
+    else:
+        return None
 
 @app.route("/")
 def index():
@@ -67,39 +79,40 @@ def callback():
                token_type, expires_in
     # Auth Step 4: Requests refresh and access tokens
     auth_token = request.args['code']
-    token_json = spotifyOAuth.get_cached_token()
+    # get cahched token, refresh token if not cached
+    token_json = get_cached_token()
     if token_json is None:
         token_json = spotifyOAuth.get_access_token(str(auth_token))
-        print "Reauthenticating Token"
-    else:
-        print "Retrieving Cached Token"
+
+    # extend the session dictionary with the key, value token store
+    session["token_info"] = token_json
     access_token, refresh_token, token_type, expires_in = \
-            load_token_json(token_json)
+            retrieveTokensFromSession()
+
 
     # Auth Step 6: Use the access token to access Spotify API
-    authorization_header = {"Authorization":"Bearer {}".format(access_token)}
+    # authorization_header = {"Authorization":"Bearer {}".format(access_token)}
+
+    # create the object used to access the spotify api wrappers
+    sp = spotipy.Spotify(auth=session["token_info"]["access_token"])
 
     # Get profile data
-    user_profile_api_endpoint = "{}/me".format(SPOTIFY_API_URL)
-    profile_response = requests.get(user_profile_api_endpoint, headers=authorization_header)
-    profile_data = json.loads(profile_response.text)
+    profile_data = sp.current_user()
+    username = profile_data["id"]
 
     # Get user playlist data
-    playlist_api_endpoint = "{}/playlists".format(profile_data["href"])
-    playlists_response = requests.get(playlist_api_endpoint, headers=authorization_header)
-    playlist_data = json.loads(playlists_response.text)
+    playlist_data = sp.user_playlists(username)
     
     # get the track name for every track in the display
-    display_arr = []
     for playlist in playlist_data["items"]:
-        endpoint_str = "{}/{}/tracks".format(playlist_api_endpoint,
-                                             playlist["id"])
-        tracks_response = requests.get(endpoint_str,
-                                       headers=authorization_header)
-        track_data = json.loads(tracks_response.text)
+        # get playlist track data
+        track_data = sp.user_playlist_tracks(username, playlist["id"])
         tracks = [item["track"] for item in track_data["items"]]
-        display_arr.extend([track["name"] for track in tracks])
+        print tracks
 
+    # display all the playlists for the user
+    display_arr = [playlist["name"] for playlist in\
+            sp.user_playlists(username)["items"]]
     return render_template("index.html",sorted_array=display_arr)
 
 
