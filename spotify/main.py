@@ -1,5 +1,7 @@
 import json
 from flask import Flask, request, redirect, g, render_template
+import requests
+import spotipy
 import base64
 import urllib
 import os
@@ -29,8 +31,8 @@ SPOTIFY_API_URL = "{}/{}".format(SPOTIFY_API_BASE_URL, API_VERSION)
 CLIENT_SIDE_URL = "http://localhost"
 PORT = 8080
 REDIRECT_URI = "{}:{}/callback/".format(CLIENT_SIDE_URL, PORT)
-SCOPE = ("playlist-read-private"
-         "playlist-modify-public"
+SCOPE = ("playlist-read-private "
+         "playlist-modify-public "
          "playlist-modify-private"
         )
 STATE = ""
