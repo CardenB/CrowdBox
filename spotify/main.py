@@ -1,5 +1,6 @@
 import json
-from flask import Flask, request, redirect, g, render_template, session
+from flask import Flask, request, redirect, g, render_template, session,\
+                  url_for, g
 import requests
 import spotipy
 from spotipy import oauth2
@@ -13,6 +14,7 @@ Authentication Steps, paramaters, and responses are defined at
 Visit this url to see all the steps, parameters, and expected response. 
 '''
 
+sp = None
 app = Flask(__name__)
 app.secret_key = os.environ['FLASK_SECRET_KEY']
 
@@ -62,10 +64,55 @@ def get_cached_token():
     else:
         return None
 
-@app.route("/")
+
+def getUsername(sp):
+    return sp.current_user()['id']
+
+def getPlaylistID(sp):
+    playlists = sp.user_playlists(getUsername(sp))['items']
+    for playlist in playlists:
+        return playlist['id']
+
+
+
+@app.route("/search", methods=["POST"])
+def search():
+    return redirect(url_for('search_results', query=request.form["search"]))
+
+
+@app.route("/search_results/<query>")
+def search_results(query):
+    auth_token = session["token_info"]["access_token"]
+    sp = spotipy.Spotify(auth=auth_token)
+    # Get profile data
+    profile_data = sp.current_user()
+    username = profile_data["id"]
+    results = sp.search(q=query, type='track')
+
+    results = [{'name' : track['name'],
+                'track_id' : track['id']} \
+        for track in results['tracks']['items']]
+    print results
+    return render_template("index.html", tracks=results)
+
+
+@app.route("/track/add/<track_id>")
+def track_add(track_id):
+    auth_token = session["token_info"]["access_token"]
+    sp = spotipy.Spotify(auth=auth_token)
+    sp.user_playlist_add_tracks(getUsername(sp), getPlaylistID(sp), [track_id])
+    return redirect(url_for('index', tracks=[]))
+
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    # Auth Step 1: Authorization
-    return redirect(spotifyOAuth.get_authorize_url())
+    # create the object used to access the spotify api wrappers
+    if "token info" in session.keys():
+        auth_token = session["token_info"]["access_token"]
+    else:
+        # Auth Step 1: Authorization
+        return redirect(spotifyOAuth.get_authorize_url())
+    return render_template('index.html', tracks=[])
 
 
 @app.route("/callback/")
@@ -88,32 +135,7 @@ def callback():
     session["token_info"] = token_json
     access_token, refresh_token, token_type, expires_in = \
             retrieveTokensFromSession()
-
-
-    # Auth Step 6: Use the access token to access Spotify API
-    # authorization_header = {"Authorization":"Bearer {}".format(access_token)}
-
-    # create the object used to access the spotify api wrappers
-    sp = spotipy.Spotify(auth=session["token_info"]["access_token"])
-
-    # Get profile data
-    profile_data = sp.current_user()
-    username = profile_data["id"]
-
-    # Get user playlist data
-    playlist_data = sp.user_playlists(username)
-    
-    # get the track name for every track in the display
-    for playlist in playlist_data["items"]:
-        # get playlist track data
-        track_data = sp.user_playlist_tracks(username, playlist["id"])
-        tracks = [item["track"] for item in track_data["items"]]
-        print tracks
-
-    # display all the playlists for the user
-    display_arr = [playlist["name"] for playlist in\
-            sp.user_playlists(username)["items"]]
-    return render_template("index.html",sorted_array=display_arr)
+    return render_template('index.html', tracks=[])
 
 
 if __name__ == "__main__":
